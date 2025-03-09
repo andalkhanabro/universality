@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+
+"""a script to extract engineered features for phase transitions using new (K) and arctan(D) indicator variables"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+from argparse import ArgumentParser
+
+from universality.properties import features
+from universality.utils import (io, utils)
+
+parser = ArgumentParser()
+
+parser.add_argument("eospath")
+parser.add_argument("macropath")
+parser.add_argument("--sw", default = 3.5, type=float, help = "sigma for the gaussian smoothing applied to K")
+parser.add_argument('-v', '--verbose', default=False, action='store_true')
+parser.add_argument("--diff_k_threshold", default = features.DEFAULT_TANHK_DIFF_THRESHOLD, type=float, help = "min drop in K across the transition")
+parser.add_argument("--cs_drop_threshold", default = features.DEFAULT_CS2C2_DROP_RATIO, type=float, help = "Rsc2 threshold")
+parser.add_argument("--diff_arctan_threshold", default = features.DEFAULT_ARCTAN_DIFF_THRESHOLD, type=float, help = "min drop in arctan(D) across transition")
+parser.add_argument("--outpath", type=str, help = "path to save identified features in. if omitted, saves to current directory with format eos-draw-{num}.csv-features")
+parser.add_argument("--plot", action="store_true", default=False, help = "add this for annotated plots of the identified transitions")
+
+
+args = parser.parse_args()
+verbose = args.verbose
+
+# load in macro data
+
+if verbose:
+    print("loading macro data from "+args.macropath)
+
+macrodata, macro_columns = io.load(args.macropath, columns=['central_energy_densityc2', 'M', 'I', 'central_cs2c2', 
+     'central_pressurec2', 'I', 'R', 'Lambda', 'central_baryon_density'])
+
+# load in eos data
+
+if verbose:
+    print("loading eos data from "+args.eospath)
+
+eos_data, eos_cols = io.load(args.eospath, ["baryon_density", "cs2c2", "pressurec2"])
+baryon_density = eos_data[:,eos_cols.index("baryon_density")]### sort so we increase in baryon density
+eos_data = eos_data[np.argsort(baryon_density)] 
+eos_cs2c2 = eos_data[:,eos_cols.index("cs2c2")]
+eos_pressure = eos_data[:,eos_cols.index("pressurec2")]
+
+# separate macro variables 
+
+central_pressure = macrodata[:,macro_columns.index("central_pressurec2")]
+moi = macrodata[:,macro_columns.index("I")]
+mass = macrodata[:,macro_columns.index("M")]
+L = macrodata[:,macro_columns.index("Lambda")]
+macro_cs2c2 = macrodata[:,macro_columns.index("central_cs2c2")]
+central_energy_density = macrodata[:,macro_columns.index("central_energy_densityc2")]
+radius = macrodata[:,macro_columns.index("R")]
+rhoc = macrodata[:,macro_columns.index("central_baryon_density")]
+
+# extract all features 
+
+params, names, arctan_dlnR_dlnM, tanh_k = features.data2_tanh_features(
+    rhoc, 
+    mass=mass, 
+    radius=radius, 
+    eos_cs2c2=eos_cs2c2, 
+    baryon_density=baryon_density,
+    central_pressure=central_pressure,
+    macro_data= macrodata, 
+    eos_data=eos_data, 
+    eos_cols = eos_cols, 
+    macro_cols=macro_columns,
+    diff_arctan_threshold=args.diff_arctan_threshold, 
+    cs_drop_threshold=args.cs_drop_threshold, 
+    diff_k_threshold=args.diff_k_threshold,
+)
+
+if args.outpath is not None:
+    fullpath = args.outpath
+else:
+    fullpath = args.eospath+"-features"
+
+if args.verbose:
+    print('saving parameters of %d identified phase transitions to: %s'%(len(params), fullpath))
+
+io.write(fullpath, params, names)
+
+
+### optional plotting functionality (makes a 2x2 plot of K, arctan(D), eos and cs2c2)
+
+if args.plot:
+
+    import pandas as pd
+
+    mtov = np.argmax(mass)
+    rhoc_at_mtov = rhoc[mtov]
+    max_mass = mass[mtov] + 0.05
+
+    fig, axes = plt.subplots(2, 2, figsize=(19, 15))
+    ax1, ax2, ax3, ax4 = axes.flatten()  
+
+    extracted = pd.read_csv(fullpath)
+
+    ### AX1 
+
+    ax1.plot(baryon_density, eos_cs2c2, color = "purple", lw=3)
+    features.modify_ticks(ax1)
+    ax1.set_xscale("log")
+    ax1.set_xlim(8e13, 5e15) #FIXME: i probably shouldn't hardcode this
+
+    start_pts_y = extracted["running_max_cs2c2_cs2c2"]
+    start_pts_x = extracted["running_max_cs2c2_baryon_density"]
+
+    end_pts_x = extracted["max_tanh_k_baryon_density"]
+    end_pts_y = extracted["max_tanh_k_cs2c2"]
+
+    ax1.plot(end_pts_x, end_pts_y, color= "blue", markerfacecolor='none', 
+                            markeredgecolor="blue", markersize=13, linestyle='None', markeredgewidth=4, marker = 4)
+    ax1.plot(start_pts_x, start_pts_y, color= "blue", markerfacecolor='none', 
+                            markeredgecolor="red", markersize=13, linestyle='None', markeredgewidth=4, marker = 5)
+
+    ax1.scatter(rhoc[mtov], macro_cs2c2[mtov], color = "black", alpha = 0.5, s= 200)
+
+    # find central baryon density at mtov
+
+    rhoc_at_mtov = rhoc[mtov]
+    macro_cs2c2_at_mtov = macro_cs2c2[mtov]
+
+    rhoc_at_bound = rhoc[mtov]
+    macro_cs2c2_at_bound = macro_cs2c2[mtov]
+
+    ax1.set_xlim(1e14, rhoc_at_bound)
+    ax1.scatter(rhoc_at_mtov, macro_cs2c2_at_mtov, color = "black", alpha = 0.5, s= 200)
+
+    ax1.set_xlabel(r"$\rho$")
+    ax1.set_ylabel(r"$c_s^2/c^2$")
+
+    ## AX2 
+
+    ax2.plot(mass, arctan_dlnR_dlnM, color = "purple", lw = 3)
+    features.modify_ticks(ax2)
+
+    start_pts_x = extracted["running_max_cs2c2_M"]
+    start_pts_y = extracted["running_max_cs2c2_arctan_dlnR_dlnM"]
+
+    end_pts_x = extracted["max_tanh_k_M"]
+    end_pts_y = extracted["max_tanh_k_arctan_dlnR_dlnM"]
+
+    ax2.plot(end_pts_x, end_pts_y, color= "blue", markerfacecolor='none', 
+                            markeredgecolor="blue", markersize=13, linestyle='None', markeredgewidth=4, marker = 4)
+    ax2.plot(start_pts_x, start_pts_y, color= "blue", markerfacecolor='none', 
+                            markeredgecolor="red", markersize=13, linestyle='None', markeredgewidth=4, marker = 5)
+    ax2.scatter(mass[mtov], arctan_dlnR_dlnM[mtov], color = "black", alpha = 0.5, s= 200)
+    ax2.set_xlabel(r"$M_{\odot}$")
+    ax2.set_ylabel(r"$\arctan(D)$")
+
+    y_min, y_max = ax2.get_ylim()
+    ax2.set_ylim(y_min, y_max) 
+    ax2.axhspan(np.pi/2, y_max, alpha=0.5, hatch = "\\", color = "gray")
+    ax2.axhspan(y_min, -np.pi/2, alpha=0.5, hatch = "\\", color = "gray")
+
+    # plotting features from extract-moi-features as well on the same plot to see where the fourth transition is 
+
+    ## AX3 
+
+    ax3.plot(baryon_density, eos_pressure, color = "purple", lw = 3)
+
+    start_pts_x = extracted["running_max_cs2c2_baryon_density"]
+    start_pts_y = extracted["running_max_cs2c2_pressurec2"]
+
+    end_pts_x = extracted["max_tanh_k_baryon_density"]
+    end_pts_y = extracted["max_tanh_k_pressurec2"]
+
+    ax3.plot(end_pts_x, end_pts_y, color= "blue", markerfacecolor='none', 
+                            markeredgecolor="blue", markersize=13, linestyle='None', markeredgewidth=4, marker = 4)
+    ax3.plot(start_pts_x, start_pts_y, color= "blue", markerfacecolor='none', 
+                            markeredgecolor="red", markersize=13, linestyle='None', markeredgewidth=4, marker = 5)
+
+    features.modify_ticks(ax3)
+    ax3.set_xlim(1e14, 4e15)
+    features.modify_ticks(ax3)
+    ax3.set_xscale("log")
+    ax3.set_yscale("log")
+    ax3.set_ylim(1e12, 1e16)
+
+    ax3.set_xlabel(r"$\rho$")
+    ax3.set_ylabel(r"$p/c^2$")
+
+
+    ### AX4 
+
+    start_x, start_y = extracted["running_max_cs2c2_central_pressurec2"], extracted["running_max_cs2c2_tanh_k"]
+    end_x, end_y = extracted["max_tanh_k_central_pressurec2"], extracted["max_tanh_k_tanh_k"]
+
+    ax4.plot(central_pressure[0:mtov], tanh_k[0:mtov], lw = 3, color = "purple")
+    features.modify_ticks(ax4)
+    ax4.set_xscale("log")
+    ax4.scatter(central_pressure[mtov], tanh_k[mtov], color = "black", alpha = 0.5, s= 200)
+    ax4.set_xlabel(r"$P_c$")
+    ax4.set_ylabel(r"$tanh(K_R)$")
+    ax4.plot(end_x, end_y, color= "blue", markerfacecolor='none', 
+                            markeredgecolor="blue", markersize=13, linestyle='None', markeredgewidth=4, marker = 4)
+    ax4.plot(start_x, start_y, color= "blue", markerfacecolor='none', 
+                            markeredgecolor="red", markersize=13, linestyle='None', markeredgewidth=4, marker = 5)
+
+
+    y_min, y_max = ax4.get_ylim()
+    ax4.set_ylim(y_min, y_max) 
+    ax4.axhspan(0, y_max, alpha=0.25, hatch = ".", color = "lightblue")
+    ax4.axhspan(y_min, 0, alpha=0.25, hatch = ".", color = "lightcoral")
+
+    plt.tight_layout()
+
+    plotpath=(args.eospath).replace(".csv", "")+"-plot.png"
+    plt.savefig(plotpath)
+
+    if args.verbose:
+        print(f"plot saved to {plotpath}")

@@ -14,6 +14,12 @@ from argparse import ArgumentParser
 from universality.utils import (io, utils)
 from universality.plot.utils import plt
 
+### some additional imports 
+
+from scipy.ndimage import gaussian_filter1d
+import matplotlib.ticker as ticker 
+
+
 #-------------------------------------------------
 
 DEFAULT_EOS_COLUMNS = ['baryon_density', 'pressurec2', 'energy_densityc2', 'cs2c2']
@@ -860,3 +866,412 @@ def process2moi_features(
                 pass ### directory already exists
 
         io.write(sum_path, params, names)
+
+
+
+# andal's functions here 
+
+
+
+def modify_ticks(plot):
+    plot.xaxis.set_minor_locator(ticker.AutoMinorLocator(2))
+    plot.yaxis.set_minor_locator(ticker.AutoMinorLocator(2))
+
+    for label in plot.get_xticklabels() + plot.get_yticklabels():
+        label.set_fontsize(30)
+        label.set_fontweight('extra bold')
+        label.set_color('black')
+
+    plot.xaxis.label.set_size(32)
+    plot.yaxis.label.set_size(32)
+    plot.title.set_size(18)
+    plot.title.set_fontweight(900)       
+
+    plot.xaxis.label.set_fontweight('extra bold')
+    plot.yaxis.label.set_fontweight(1000)
+
+    plot.xaxis.set_minor_locator(ticker.AutoMinorLocator(2))
+    plot.yaxis.set_minor_locator(ticker.AutoMinorLocator(2))
+    plot.tick_params(axis='both', which='major', width=2.5, length=10, color='black', direction='in', pad=10)
+    plot.tick_params(top=True, bottom=True, left=True, right=True)
+
+    for spine in plot.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(2.5)
+
+
+DEFAULT_K_FEATURE_NAME = "feature"
+DEFAULT_ARCTAN_DIFF_THRESHOLD= 0.05
+DEFAULT_TANHK_DIFF_THRESHOLD = 0.05
+DEFAULT_CS2C2_DROP_RATIO = 1.11
+MAX_K_TEMPLATE = "max_tanh_k_%s"
+MIN_K_TEMPLATE = "min_tanh_k_%s"   
+
+def data2_tanh_features(
+          rhoc,
+          mass, 
+          radius, 
+          baryon_density, 
+          eos_cs2c2, 
+          macro_data,
+          macro_cols, 
+          eos_data, 
+          eos_cols, 
+          central_pressure,
+          verbose=True,
+          flatten_thr=DEFAULT_FLATTEN_THR,
+          smoothing_width=DEFAULT_SMOOTHING_WIDTH,
+          diff_thr=DEFAULT_ARCTAN_DIFF_THRESHOLD,
+          cs2c2_drop_ratio=DEFAULT_CS2C2_DROP_RATIO,
+          tanh_k_threshold=DEFAULT_TANHK_DIFF_THRESHOLD, 
+          tanh_k_sigma=3,
+          cs_drop_threshold=DEFAULT_CS2C2_DROP_RATIO, 
+          diff_k_threshold=DEFAULT_TANHK_DIFF_THRESHOLD,
+          diff_arctan_threshold=DEFAULT_ARCTAN_DIFF_THRESHOLD
+    ):
+
+    names = [DEFAULT_K_FEATURE_NAME]
+
+    for tmp in [
+            MIN_CS2C2_TEMPLATE, 
+            MAX_CS2C2_TEMPLATE,
+            RMAX_CS2C2_TEMPLATE,
+            LOW_CS2C2_TEMPLATE,
+            HGH_CS2C2_TEMPLATE,
+            MIN_K_TEMPLATE,
+            MAX_K_TEMPLATE, 
+        ]:
+        names.append(tmp % 'tanh_k')
+        names.append(tmp % 'arctan_dlnR_dlnM')
+        names += [tmp%col for col in macro_cols]
+        names += [tmp%col for col in eos_cols]
+    
+    params= []
+
+    arctan_dlnR_dlnM, (spurious, dlnM_drhoc, dlnI_drhoc) = arctan_transform(rhoc, mass, radius, smoothing_width=0.01) 
+
+    tanh_k = tanh_k_transform(arctan_dlnR_dlnM, rhoc, mass, sw = tanh_k_sigma) 
+    maxima_in_tanh_k = find_inclusive_maxima(tanh_k)
+
+
+    ends = list([index for index in maxima_in_tanh_k if tanh_k[index] > 0][::-1]) # new indicator variable
+    ends += list(find_minima(arctan_dlnR_dlnM)[::-1]) # add features from old indicator variable as well 
+
+    while len(ends):
+        end = ends[-1]
+        if np.any(dlnM_drhoc[:end] > 0): ### something is stable before this
+             break
+        ends = ends[:-1] ### truncate this guy
+
+    # discard any local minima that are in the final unstable branch
+    while len(ends):
+        end = ends.pop(0)
+        if np.any(dlnM_drhoc[end:] > 0): ### not part of the 'final unstable branch'
+            ends.insert(0, end)
+            break
+
+    if ends: ### we have something to do
+
+        ### if the lowest rhoc available is a minimum, we discard it since we can't tell if it is a local minimum or not
+
+        if ends[-1] == 0:                                                  # ANDAL: this is basically that if the min in arctan(D) is due to the first point, so ignore that. 
+            ends = ends[:-1]
+
+        if ends[0] == len(rhoc)-1: ### same thing with the end point
+            ends = ends[1:]
+        
+            ### local minima in sound speed
+        min_cs2c2 = np.array(find_inclusive_minima(eos_cs2c2))
+        min_cs2c2_baryon_density = baryon_density[min_cs2c2]
+
+        ### local maxima in sound speed
+        max_cs2c2 = np.array(find_inclusive_maxima(eos_cs2c2))
+        max_cs2c2_baryon_density = baryon_density[max_cs2c2]
+
+        rmax_cs2c2 = find_running_maxima(eos_cs2c2)
+
+        if not rmax_cs2c2: ### no qualifying maxima
+                
+                ends = [] ### this will make us skip all the ends because we can't match them to starting points
+
+        else:
+                rmax_cs2c2 = np.array(rmax_cs2c2)
+                rmax_cs2c2_baryon_density = baryon_density[rmax_cs2c2]
+
+        Neos = len(eos_cols)
+        Nmac = len(macro_cols)
+
+        mtov = np.argmax(mass)
+
+        for end in ends:
+                r = rhoc[end]
+
+                mtov_baryon_density = rhoc[mtov]
+
+                if r >= mtov_baryon_density:
+                    continue
+
+
+                if verbose:
+                    print('        processing end=%d/%d at rhoc=%.6e'%(end, len(rhoc), r))
+
+                #---
+
+                ### min sound speed preceeding "end"
+                try:
+                    ind_min_cs2c2 = find_preceeding(r, min_cs2c2_baryon_density, min_cs2c2)
+                except RuntimeError:
+                    if verbose:
+                        print('            WARNING! could not find local minimum in cs2c2 preceeding local minimum in arctan(dlogI/dlogM)')
+
+                    continue
+
+                min_r = baryon_density[ind_min_cs2c2]
+                min_cs2c2_tanh_k = np.interp(min_r, rhoc, tanh_k)
+
+                #---
+
+                ### max sound speed preceeding minimum sound speed
+                try:
+                    ind_max_cs2c2 = find_preceeding(min_r, max_cs2c2_baryon_density, max_cs2c2)
+                except RuntimeError:
+                    if verbose:
+                        print('            WARNING! could not find local maximum in cs2c2 preceeding local minimum in cs2c2')
+
+                    continue
+
+                max_r = baryon_density[ind_max_cs2c2]
+
+                try:
+                    ind_rmax_cs2c2 = find_preceeding(max_r, rmax_cs2c2_baryon_density, rmax_cs2c2)
+                except RuntimeError:
+                    if verbose:
+                        print('            WARNING! could not find running maximum in cs2c2 preceeding local minimum in cs2c2')
+
+                    continue
+
+                rmax_r = baryon_density[ind_rmax_cs2c2]
+                rmax_cs2c2_tanh_k = np.interp(rmax_r, rhoc, tanh_k)  #ANDAL: replaced arctan with tanh(K) here 
+                
+                selected = (rmax_r <=rhoc) * (rhoc <= r)
+                max_tanh_k = rhoc[selected][np.argmax(tanh_k[selected])]
+                ind_max_tanh_k = np.arange(len(rhoc))[rhoc==max_tanh_k][0]
+
+                max_arctan_r = rhoc[selected][np.argmax(arctan_dlnR_dlnM[selected])]
+                ind_max_arctan= np.arange(len(rhoc))[rhoc==max_arctan_r][0]
+
+                selected = (rmax_r <= baryon_density) * (baryon_density<=r)
+                low_cs2c2_r = baryon_density[selected][np.argmin(eos_cs2c2[selected])]
+                ind_low_cs2c2 = np.arange(len(eos_cs2c2))[low_cs2c2_r==baryon_density][0]
+
+                hgh_cs2c2_r = baryon_density[selected][np.argmax(eos_cs2c2[selected])]
+                ind_hgh_cs2c2 = np.arange(len(eos_cs2c2))[hgh_cs2c2_r==baryon_density][0]
+
+
+                ####
+
+                diff_k = rmax_cs2c2_tanh_k - tanh_k[end]  # this should be difference between running max and end in tanhk to remove small "wiggles" in tanhk 
+                diff_arctan = arctan_dlnR_dlnM[ind_max_arctan] - arctan_dlnR_dlnM[end]
+
+                # sound speed must drop by a certain fraction
+                drop_ratio = eos_cs2c2[ind_rmax_cs2c2] / eos_cs2c2[ind_low_cs2c2]
+                cs2c2_drop_ratio = cs_drop_threshold #ANDAL: why is the default 0..?
+                DIFF_K_THRESH = diff_k_threshold
+                DIFF_ARCTAN_RATIO = diff_arctan_threshold
+
+                while ((drop_ratio < cs2c2_drop_ratio) or (diff_arctan < DIFF_ARCTAN_RATIO) or (np.abs(diff_k) < DIFF_K_THRESH)): # post-hoc removal of phase transitions 
+
+                    # first, find preceeding local max_cs2c2
+                    try:
+                        truth = max_cs2c2_baryon_density < rmax_r ### move to a local max that is before the current running max
+                        jnd_max_cs2c2 = find_preceeding(rmax_r, max_cs2c2_baryon_density[truth], max_cs2c2[truth])
+
+                    except RuntimeError:
+                        if verbose:
+                            print('            WARNING! could not find local maximum in cs2c2 preceeding local minimum in cs2c2')
+                        break
+
+                    # then update rmax_cs2c2 to be before that
+                    try:
+                        ind_rmax_cs2c2 = find_preceeding(baryon_density[jnd_max_cs2c2], rmax_cs2c2_baryon_density, rmax_cs2c2)
+                    except RuntimeError:
+                        if verbose:
+                            print('            WARNING! could not find running maximum in cs2c2 preceeding local minimum in cs2c2')
+
+                        break
+
+                    rmax_r = baryon_density[ind_rmax_cs2c2]
+                    rmax_cs2c2_tanh_k = np.interp(rmax_r, rhoc, tanh_k)
+
+                    ### now find the maximum arctan(...) between rmax_r and r
+                    selected = (rmax_r<=rhoc) * (rhoc<=r)
+                    max_tanh_k = rhoc[selected][np.argmax(tanh_k[selected])]
+                    ind_max_tanh_k = np.arange(len(rhoc))[rhoc==max_tanh_k][0]
+
+                    max_arctan_r = rhoc[selected][np.argmax(arctan_dlnR_dlnM[selected])]
+                    ind_max_arctan= np.arange(len(rhoc))[rhoc==max_arctan_r][0]
+
+                    selected = (rmax_r<=baryon_density) * (baryon_density<=r)
+                    low_cs2c2_r = baryon_density[selected][np.argmin(eos_cs2c2[selected])]
+                    ind_low_cs2c2 = np.arange(len(eos_cs2c2))[low_cs2c2_r==baryon_density][0]
+
+                    hgh_cs2c2_r = baryon_density[selected][np.argmin(eos_cs2c2[selected])]
+                    ind_hgh_cs2c2 = np.arange(len(eos_cs2c2))[hgh_cs2c2_r==baryon_density][0]
+
+                    
+                    # update conditionals
+                    diff_k = rmax_cs2c2_tanh_k - tanh_k[end]
+                    diff_arctan = arctan_dlnR_dlnM[ind_max_arctan] - arctan_dlnR_dlnM[end]
+                    drop_ratio = eos_cs2c2[ind_rmax_cs2c2] / eos_cs2c2[ind_low_cs2c2]
+
+                if (drop_ratio < cs2c2_drop_ratio) or (diff_arctan < DIFF_ARCTAN_RATIO) or (np.abs(diff_k) < DIFF_K_THRESH): # we exited from the break statement
+                    continue
+
+                datum = []
+
+                # add local min in cs2c2
+                datum.append(np.interp(min_r, rhoc, tanh_k))
+                datum.append(np.interp(min_r, rhoc, arctan_dlnR_dlnM))
+                datum += [np.interp(min_r, rhoc, macro_data[:,i]) for i in range(Nmac)]
+                datum += list(eos_data[ind_min_cs2c2])
+
+                # add local max in cs2c2
+                datum.append(np.interp(max_r, rhoc, tanh_k))
+                datum.append(np.interp(max_r, rhoc, arctan_dlnR_dlnM))
+                datum += [np.interp(max_r, rhoc, macro_data[:,i]) for i in range(Nmac)]
+                datum += list(eos_data[ind_max_cs2c2])
+
+                # add running max in cs2c2
+                datum.append(np.interp(rmax_r, rhoc, tanh_k))
+                datum.append(np.interp(rmax_r, rhoc, arctan_dlnR_dlnM))
+                datum += [np.interp(rmax_r, rhoc, macro_data[:,i]) for i in range(Nmac)]
+                datum += list(eos_data[ind_rmax_cs2c2])
+
+                # add lowest cs2c2 within feature
+                datum.append(np.interp(low_cs2c2_r, rhoc, tanh_k))
+                datum.append(np.interp(low_cs2c2_r, rhoc, arctan_dlnR_dlnM))
+                datum += [np.interp(low_cs2c2_r, rhoc, macro_data[:,i]) for i in range(Nmac)]
+                datum += list(eos_data[ind_low_cs2c2])
+
+                # add highest cs2c2 within feature
+                datum.append(np.interp(hgh_cs2c2_r, rhoc, tanh_k))
+                datum.append(np.interp(hgh_cs2c2_r, rhoc, arctan_dlnR_dlnM))
+                datum += [np.interp(hgh_cs2c2_r, rhoc, macro_data[:,i]) for i in range(Nmac)]
+                datum += list(eos_data[ind_hgh_cs2c2])
+
+                # add parameters at max tanhk
+                datum.append(tanh_k[ind_max_tanh_k])
+                datum.append(arctan_dlnR_dlnM[ind_max_tanh_k])
+                datum += list(macro_data[ind_max_tanh_k])
+                datum += [np.interp(max_tanh_k, baryon_density, eos_data[:,i]) for i in range(Neos)]
+
+                # add parameters at "end" (min tanhk)
+                datum.append(tanh_k[end])
+                datum.append(arctan_dlnR_dlnM[end])
+                datum += list(macro_data[end])
+                datum += [np.interp(r, baryon_density, eos_data[:,i]) for i in range(Neos)]
+
+                params.append(datum)
+
+        
+        ### finish formatting data
+        params = [[ind]+thing for ind, thing in enumerate(params)] ### include a transition number for reference
+
+        if not len(params):
+            params = np.empty((0,len(names)), dtype=float) ### do this so we have a consistent shape
+
+        else:
+            params = np.array(params, dtype=float)
+
+    return (params, names, arctan_dlnR_dlnM, tanh_k)
+
+
+def process2all_features(
+        data,                   
+        eos_template,
+        eos_num_per_dir,
+        mac_template,
+        macro_num_per_dir,
+        summary_template,
+        eos_rho,
+        eos_cs2c2,
+        macro_rhoc,
+        macro_mass,
+        macro_radius,
+        output_eos_columns=DEFAULT_EOS_COLUMNS,
+        output_macro_cols=DEFAULT_macro_cols,
+        flatten_thr=DEFAULT_FLATTEN_THR,
+        smoothing_width=DEFAULT_SMOOTHING_WIDTH,
+        diff_thr=DEFAULT_DIFF_THR,
+        cs2c2_drop_ratio=DEFAULT_CS2C2_DROP_RATIO,
+        diff_arctan_threshold=DEFAULT_ARCTAN_DIFF_THRESHOLD,
+        diff_k_threshold=DEFAULT_TANHK_DIFF_THRESHOLD,
+        verbose=False,
+        debug=False,
+    ):
+    """extract the branches for each EoS specified
+    """
+    N = len(data)                                                              
+    for ind, eos in enumerate(data): # so it does have some eos.. 
+
+        ### construct paths
+        # where we're going to read in data
+        eos_path = eos_template%{'moddraw':eos//eos_num_per_dir, 'draw':eos}   
+
+        tmp = {'moddraw':eos//macro_num_per_dir, 'draw':eos}
+        mac_path = mac_template%tmp
+
+        # where we're going to write data
+        sum_path = summary_template%tmp
+
+        if verbose:
+            print('    %d/%d'%(ind+1, N))
+            print('    loading macro: %s'%mac_path)
+        mac_data, mac_cols = io.load(mac_path, [macro_rhoc, macro_mass, macro_radius]+output_macro_cols) ### NOTE: we load all columns because we're going to re-write them all into subdir as separate branches
+
+        if verbose:
+            print('    loading eos: %s'%eos_path)
+        eos_data, eos_cols = io.load(eos_path, [eos_rho, eos_cs2c2]+output_eos_columns) ### NOTE: this guarantees that eos_rho is the first column!
+        baryon_density = eos_data[:,eos_cols.index(eos_rho)] ### separate this for convenience
+        eos_cs2c2 = eos_data[:,eos_cols.index(eos_cs2c2)] 
+
+        # use macro data to identify separate stable branches
+        # NOTE: we expect this to be ordered montonically in rhoc
+        M = mac_data[:,mac_cols.index(macro_mass)]
+        radius = mac_data[:,mac_cols.index(macro_radius)] 
+        rhoc = mac_data[:,mac_cols.index(macro_rhoc)]
+        central_pressure = mac_data[:,mac_cols.index("central_pressurec2")]
+
+        if debug:
+            debug_figname = eos_path[:-4] + '-all_features.png'
+        else:
+            debug_figname = None
+
+        params, names, arctan_dlnR_dlnM, tanh_k = data2_tanh_features(
+            rhoc, 
+            mass=M, 
+            radius=radius, 
+            eos_cs2c2=eos_cs2c2, 
+            baryon_density=baryon_density,
+            central_pressure=central_pressure,
+            macro_data= mac_data, 
+            eos_data=eos_data, 
+            eos_cols = eos_cols, 
+            macro_cols=mac_cols,
+            diff_arctan_threshold=diff_arctan_threshold, 
+            cs_drop_threshold=cs2c2_drop_ratio,
+            diff_k_threshold=diff_k_threshold)
+        
+        if verbose:
+            print('    writing summary of %d identified all-features into: %s'%(len(params), sum_path))
+
+        newdir = os.path.dirname(sum_path)
+        if not os.path.exists(newdir):
+            try:
+                os.makedirs(newdir)
+            except OSError:
+                pass ### directory already exists
+
+        io.write(sum_path, params, names)
+
+
