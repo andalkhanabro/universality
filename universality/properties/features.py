@@ -871,6 +871,21 @@ def process2moi_features(
 
 # andal's functions here 
 
+from scipy.ndimage import gaussian_filter1d
+
+def tanh_k_transform(arctan_data, central_pressure, mass, sw=3.5):
+    """compute the tanh K transform for additional features based on the transformed mass-radius relationship
+    """
+
+    dm_dpc = utils.num_dfdx(np.log(central_pressure), (mass)) 
+    dm_dpc_second = utils.num_dfdx(np.log(central_pressure), dm_dpc) 
+    darctan_D_dpc = utils.num_dfdx(np.log(central_pressure), arctan_data)
+    darctan_D_dpc_second = utils.num_dfdx(np.log(central_pressure), darctan_D_dpc) 
+    raw_k_r = (dm_dpc * darctan_D_dpc_second -  darctan_D_dpc * dm_dpc_second) / ( dm_dpc**2 + darctan_D_dpc**2)**1.5
+
+    smoothed_k_r = gaussian_filter1d(raw_k_r, sigma=sw) # gaussian smoothing to filter out noise, ~ 3.5 seems to work well 
+
+    return np.tanh(smoothed_k_r) 
 
 
 def modify_ticks(plot):
