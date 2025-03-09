@@ -1199,7 +1199,7 @@ def process2all_features(
         macro_mass,
         macro_radius,
         output_eos_columns=DEFAULT_EOS_COLUMNS,
-        output_macro_cols=DEFAULT_macro_cols,
+        output_macro_cols=DEFAULT_MACRO_COLUMNS,
         flatten_thr=DEFAULT_FLATTEN_THR,
         smoothing_width=DEFAULT_SMOOTHING_WIDTH,
         diff_thr=DEFAULT_DIFF_THR,
