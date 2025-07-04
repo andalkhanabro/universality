@@ -71,6 +71,7 @@ params, names, arctan_dlnR_dlnM, tanh_k = features.data2_tanh_features(
     diff_arctan_threshold=args.diff_arctan_threshold, 
     cs_drop_threshold=args.cs_drop_threshold, 
     diff_k_threshold=args.diff_k_threshold,
+    tanh_k_sigma=args.sw
 )
 
 if args.outpath is not None:
@@ -82,7 +83,6 @@ if args.verbose:
     print('saving parameters of %d identified phase transitions to: %s'%(len(params), fullpath))
 
 io.write(fullpath, params, names)
-
 
 ### optional plotting functionality (makes a 2x2 plot of K, arctan(D), eos and cs2c2)
 
@@ -101,10 +101,12 @@ if args.plot:
 
     ### AX1 
 
+
+    # print(macrodata)
+
     ax1.plot(baryon_density, eos_cs2c2, color = "purple", lw=3)
     features.modify_ticks(ax1)
     ax1.set_xscale("log")
-    ax1.set_xlim(8e13, 5e15) #FIXME: i probably shouldn't hardcode this
 
     start_pts_y = extracted["running_max_cs2c2_cs2c2"]
     start_pts_x = extracted["running_max_cs2c2_baryon_density"]
@@ -117,17 +119,18 @@ if args.plot:
     ax1.plot(start_pts_x, start_pts_y, color= "blue", markerfacecolor='none', 
                             markeredgecolor="red", markersize=13, linestyle='None', markeredgewidth=4, marker = 5)
 
-    ax1.scatter(rhoc[mtov], macro_cs2c2[mtov], color = "black", alpha = 0.5, s= 200)
+    ax1.scatter(rhoc[mtov], macro_cs2c2[mtov], color = "black", alpha = 0.3, s= 200)
 
     # find central baryon density at mtov
 
-    rhoc_at_mtov = rhoc[mtov]
     macro_cs2c2_at_mtov = macro_cs2c2[mtov]
 
     rhoc_at_bound = rhoc[mtov]
     macro_cs2c2_at_bound = macro_cs2c2[mtov]
 
-    ax1.set_xlim(1e14, rhoc_at_bound)
+    epsilon = 1e15
+
+    ax1.set_xlim(8e13, rhoc_at_bound + epsilon)
     ax1.scatter(rhoc_at_mtov, macro_cs2c2_at_mtov, color = "black", alpha = 0.5, s= 200)
 
     ax1.set_xlabel(r"$\rho$")
@@ -161,7 +164,7 @@ if args.plot:
 
     ## AX3 
 
-    ax3.plot(baryon_density, eos_pressure, color = "purple", lw = 3)
+    # ax3.plot(baryon_density, eos_pressure, color = "purple", lw = 3)
 
     start_pts_x = extracted["running_max_cs2c2_baryon_density"]
     start_pts_y = extracted["running_max_cs2c2_pressurec2"]
@@ -173,9 +176,22 @@ if args.plot:
                             markeredgecolor="blue", markersize=13, linestyle='None', markeredgewidth=4, marker = 4)
     ax3.plot(start_pts_x, start_pts_y, color= "blue", markerfacecolor='none', 
                             markeredgecolor="red", markersize=13, linestyle='None', markeredgewidth=4, marker = 5)
+    
+    # need to find (p_tov, rho_tov) corresponding to mtov
+
+    # rhoc and central pressure indices are same 
+
+    rhoc_at_mtov = rhoc[mtov]
+    pressure_at_mtov = central_pressure[mtov] # DETAIL: both are guaranteed to exist 
+
+    ax3.plot(baryon_density[baryon_density <= rhoc_at_mtov], eos_pressure[eos_pressure <= pressure_at_mtov], color = "purple", lw = 3)
+    ax3.scatter(baryon_density[baryon_density <= rhoc_at_mtov][-1], eos_pressure[eos_pressure <= pressure_at_mtov][-1], color = "black", alpha = 0.3, \
+                s = 200)
+
+    epsilon = 1e14
 
     features.modify_ticks(ax3)
-    ax3.set_xlim(1e14, 4e15)
+    ax3.set_xlim(1e14, baryon_density[baryon_density <= rhoc_at_mtov][-1] + epsilon)
     features.modify_ticks(ax3)
     ax3.set_xscale("log")
     ax3.set_yscale("log")
@@ -190,7 +206,10 @@ if args.plot:
     start_x, start_y = extracted["running_max_cs2c2_central_pressurec2"], extracted["running_max_cs2c2_tanh_k"]
     end_x, end_y = extracted["max_tanh_k_central_pressurec2"], extracted["max_tanh_k_tanh_k"]
 
-    ax4.plot(central_pressure[0:mtov], tanh_k[0:mtov], lw = 3, color = "purple")
+    epsilon_for_plotting = 1e14
+
+    ax4.plot(central_pressure[0:mtov] , tanh_k[0:mtov], lw = 3, color = "purple")
+    #ax4.set_xlim(central_pressure[0], central_pressure[mtov] + epsilon_for_plotting)
     features.modify_ticks(ax4)
     ax4.set_xscale("log")
     ax4.scatter(central_pressure[mtov], tanh_k[mtov], color = "black", alpha = 0.5, s= 200)

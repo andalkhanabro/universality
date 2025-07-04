@@ -22,7 +22,7 @@ MAX_PC2=$3            # max central pressure bound
     --interpolator-rtol 1e-8 \
     --integration-rtol 1e-8 \
     --V \
-    --min-num-models 100
+    --min-num-models 80
 
 # if no default outpath given to integrate-tov, macro is written in the current directory as well 
 
@@ -33,6 +33,9 @@ MACROPATH="${EOS_PATH}-macro"
 ./extract-all-features $EOS_PATH \
     $MACROPATH \
     --verbose \
-    --diff_arctan_threshold 0.05 \              
-    --sw 0.01 \
-    --plot # include it if you a plot (in the same directory)
+    --diff_arctan_threshold 0 \
+    --cs_drop_threshold 0 \
+    --diff_k_threshold 0.1 \
+    --sw 2.5 \
+    --plot
+

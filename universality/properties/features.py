@@ -163,6 +163,7 @@ def smooth(x, y, width):
 
 DEFAULT_MOI_FEATURE_NAME = 'moi_feature'
 
+
 def data2moi_features(
         rhoc,
         M,
@@ -918,9 +919,14 @@ def modify_ticks(plot):
 DEFAULT_K_FEATURE_NAME = "feature"
 DEFAULT_ARCTAN_DIFF_THRESHOLD= 0.05
 DEFAULT_TANHK_DIFF_THRESHOLD = 0.05
-DEFAULT_CS2C2_DROP_RATIO = 1.11
+DEFAULT_CS2C2_DROP_RATIO = 1.10
 MAX_K_TEMPLATE = "max_tanh_k_%s"
 MIN_K_TEMPLATE = "min_tanh_k_%s"   
+
+def special_print(text):
+    yellow = '\033[33m'
+    reset = '\033[0m'
+    print(f"{yellow}{text}{reset}")
 
 def data2_tanh_features(
           rhoc,
@@ -968,9 +974,11 @@ def data2_tanh_features(
     tanh_k = tanh_k_transform(arctan_dlnR_dlnM, rhoc, mass, sw = tanh_k_sigma) 
     maxima_in_tanh_k = find_inclusive_maxima(tanh_k)
 
+    ends = list([index for index in maxima_in_tanh_k if tanh_k[index] > 0]) # new indicator variable
+    ends += list(find_minima(arctan_dlnR_dlnM)) # add features from old indicator variable as well 
+    ends.sort(reverse=True)
 
-    ends = list([index for index in maxima_in_tanh_k if tanh_k[index] > 0][::-1]) # new indicator variable
-    ends += list(find_minima(arctan_dlnR_dlnM)[::-1]) # add features from old indicator variable as well 
+    special_print(ends)
 
     while len(ends):
         end = ends[-1]
@@ -1019,12 +1027,15 @@ def data2_tanh_features(
         mtov = np.argmax(mass)
 
         for end in ends:
+                
                 r = rhoc[end]
 
                 mtov_baryon_density = rhoc[mtov]
 
-                if r >= mtov_baryon_density:
+                if r >= mtov_baryon_density: # after mtov, so should be excluded 
                     continue
+
+                # end is an index, based on the tanh calculation, so if its bec of the truncated last index, don't count it 
 
 
                 if verbose:
