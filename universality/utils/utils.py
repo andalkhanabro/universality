@@ -120,8 +120,8 @@ def marginalize(data, logweights, columns):
     counts = defaultdict(int)
     for sample, logweight in zip(data, logweights):
         tup = tuple(sample)
-        logmargweight[tup] = sum_log((logmargweight.get(tup, -np.infty), logweight))
-        logmargweight2[tup] = sum_log((logmargweight2.get(tup, -np.infty), 2*logweight)) ### track the variance
+        logmargweight[tup] = sum_log((logmargweight.get(tup, -np.inf), logweight))
+        logmargweight2[tup] = sum_log((logmargweight2.get(tup, -np.inf), 2*logweight)) ### track the variance
         counts[tup] += 1
 
     num_columns = len(columns)
@@ -205,7 +205,7 @@ def reflect(data, bounds, weights=None):
     else:
         return d
 
-def whiten(data, verbose=False, outlier_stdv=np.infty):
+def whiten(data, verbose=False, outlier_stdv=np.inf):
     means = np.mean(data, axis=0)
     stds = np.std(data, axis=0)
 
@@ -213,7 +213,7 @@ def whiten(data, verbose=False, outlier_stdv=np.infty):
     data /= stds
 
     # adjust stds to reject outliers
-    if outlier_stdv < np.infty:
+    if outlier_stdv < np.inf:
         for i in range(data.shape[1]):
             truth = np.abs(data[:,i]) < outlier_stdv
             refactor = np.std(data[truth,i])
@@ -302,11 +302,11 @@ def downsample(data, n):
 def sum_log(logweights):
     """returns the log of the sum of the weights, retaining high precision
     """
-    if np.any(logweights==np.infty):
-        return np.infty
+    if np.any(logweights==np.inf):
+        return np.inf
     m = np.max(logweights)
-    if m==-np.infty:
-        return -np.infty
+    if m==-np.inf:
+        return -np.inf
     return np.log(np.sum(np.exp(logweights-m))) + m
 
 def logaddexp(logx):

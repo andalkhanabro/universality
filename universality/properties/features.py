@@ -23,7 +23,7 @@ import matplotlib.ticker as ticker
 #-------------------------------------------------
 
 DEFAULT_EOS_COLUMNS = ['baryon_density', 'pressurec2', 'energy_densityc2', 'cs2c2']
-DEFAULT_MACRO_COLUMNS = ['M', 'R', 'I', 'Lambda']
+DEFAULT_MACRO_COLUMNS = ['M', 'R', 'I', 'Lambda', 'central_baryon_density', 'central_cs2c2']
 
 #-------------------------------------------------
 # basic utilities for finding features before/after a particular point
@@ -50,7 +50,7 @@ def find_running_maxima(x):
 def find_running_minima(x):
     """find the indecies of the smallest thing that's been seen up until the current index"""
     mins = []
-    best = +np.infty
+    best = +np.inf
     for i, X in enumerate(x):
         if X < best:
             mins.append(i)
@@ -66,7 +66,7 @@ def find_maxima(x):
 def find_minima(x):
     """find indecies of strict local minima"""
     mins = []
-    old = +np.infty
+    old = +np.inf
     for i in range(len(x)-1):
         new = x[i]
         if (old > new) and (new < x[i+1]):
@@ -89,7 +89,7 @@ def find_inclusive_minima(x):
 if the derivative vanishes (neighboring samples are identical), then only the entry in the sequence of identical entries is returned
     """
     mins = []
-    old = +np.infty
+    old = +np.inf
     for i in range(len(x)-1):
         new = x[i]
         ### this will keep ONLY the earliest occurance in a sequence where the derivative vanishes
@@ -939,7 +939,7 @@ def data2_tanh_features(
           eos_data, 
           eos_cols, 
           central_pressure,
-          verbose=True,
+          verbose=False,
           flatten_thr=DEFAULT_FLATTEN_THR,
           smoothing_width=DEFAULT_SMOOTHING_WIDTH,
           diff_thr=DEFAULT_ARCTAN_DIFF_THRESHOLD,
@@ -978,7 +978,8 @@ def data2_tanh_features(
     ends += list(find_minima(arctan_dlnR_dlnM)) # add features from old indicator variable as well 
     ends.sort(reverse=True)
 
-    special_print(ends)
+    if verbose:
+        special_print(ends) 
 
     while len(ends):
         end = ends[-1]
@@ -1259,7 +1260,8 @@ def process2all_features(
             print('    loading eos: %s'%eos_path)
         eos_data, eos_cols = io.load(eos_path, [eos_rho, eos_cs2c2]+output_eos_columns) ### NOTE: this guarantees that eos_rho is the first column!
         baryon_density = eos_data[:,eos_cols.index(eos_rho)] ### separate this for convenience
-        eos_cs2c2 = eos_data[:,eos_cols.index(eos_cs2c2)] 
+        # eos_cs2c2 = eos_data[:,eos_cols.index(eos_cs2c2)] 
+        cs2c2_data = eos_data[:,eos_cols.index(eos_cs2c2)]
 
         # use macro data to identify separate stable branches
         # NOTE: we expect this to be ordered montonically in rhoc
@@ -1277,7 +1279,7 @@ def process2all_features(
             rhoc, 
             mass=M, 
             radius=radius, 
-            eos_cs2c2=eos_cs2c2, 
+            eos_cs2c2=cs2c2_data, 
             baryon_density=baryon_density,
             central_pressure=central_pressure,
             macro_data= mac_data, 
@@ -1286,7 +1288,8 @@ def process2all_features(
             macro_cols=mac_cols,
             diff_arctan_threshold=diff_arctan_threshold, 
             cs_drop_threshold=cs2c2_drop_ratio,
-            diff_k_threshold=diff_k_threshold)
+            diff_k_threshold=diff_k_threshold, 
+            verbose=verbose)
         
         if verbose:
             print('    writing summary of %d identified all-features into: %s'%(len(params), sum_path))

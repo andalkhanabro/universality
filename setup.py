@@ -21,4 +21,10 @@ setup(
     data_files = [],
     package_data = {'universality.eos':['*.csv']},
     requires = [],
+    install_requires=[
+    'h5py', 
+    'numpy',
+    'matplotlib', 
+    'scipy', 
+    'pandas']
 )

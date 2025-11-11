@@ -2,6 +2,11 @@
 
 """a script to extract engineered features for phase transitions using new (K) and arctan(D) indicator variables"""
 
+
+import matplotlib as mpl
+mpl.rcParams['text.usetex'] = True
+mpl.rcParams['text.latex.preamble'] = r'\usepackage{amsmath,amsfonts}'
+
 import numpy as np
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
@@ -133,8 +138,8 @@ if args.plot:
     ax1.set_xlim(8e13, rhoc_at_bound + epsilon)
     ax1.scatter(rhoc_at_mtov, macro_cs2c2_at_mtov, color = "black", alpha = 0.5, s= 200)
 
-    ax1.set_xlabel(r"$\rho$")
-    ax1.set_ylabel(r"$c_s^2/c^2$")
+    # ax1.set_xlabel(r"$\rho$")
+    # ax1.set_ylabel(r"$c_s^2/c^2$")
 
     ## AX2 
 
@@ -152,8 +157,8 @@ if args.plot:
     ax2.plot(start_pts_x, start_pts_y, color= "blue", markerfacecolor='none', 
                             markeredgecolor="red", markersize=13, linestyle='None', markeredgewidth=4, marker = 5)
     ax2.scatter(mass[mtov], arctan_dlnR_dlnM[mtov], color = "black", alpha = 0.5, s= 200)
-    ax2.set_xlabel(r"$M_{\odot}$")
-    ax2.set_ylabel(r"$\arctan(D)$")
+    # ax2.set_xlabel(r"$M_{\odot}$")
+    # ax2.set_ylabel(r"$\arctan(D)$")
 
     y_min, y_max = ax2.get_ylim()
     ax2.set_ylim(y_min, y_max) 
@@ -197,8 +202,8 @@ if args.plot:
     ax3.set_yscale("log")
     ax3.set_ylim(1e12, 1e16)
 
-    ax3.set_xlabel(r"$\rho$")
-    ax3.set_ylabel(r"$p/c^2$")
+    # ax3.set_xlabel(r"$\rho$")
+    # ax3.set_ylabel(r"$p/c^2$")
 
 
     ### AX4 
@@ -213,8 +218,8 @@ if args.plot:
     features.modify_ticks(ax4)
     ax4.set_xscale("log")
     ax4.scatter(central_pressure[mtov], tanh_k[mtov], color = "black", alpha = 0.5, s= 200)
-    ax4.set_xlabel(r"$P_c$")
-    ax4.set_ylabel(r"$tanh(K_R)$")
+    # ax4.set_xlabel(r"$P_c$")
+    # ax4.set_ylabel(r"$tanh(K_R)$")
     ax4.plot(end_x, end_y, color= "blue", markerfacecolor='none', 
                             markeredgecolor="blue", markersize=13, linestyle='None', markeredgewidth=4, marker = 4)
     ax4.plot(start_x, start_y, color= "blue", markerfacecolor='none', 

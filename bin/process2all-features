@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""an executable to extract all (arctan(D) and K) features from a process
+"""an executable to extract all (arctan(D) and K) features from a process (Andal)
 """
 
 #-------------------------------------------------
@@ -42,9 +42,7 @@ lgroup.add_argument('--eos-basename', default='draw-foo-%d.csv', type=str,
 
 lgroup.add_argument('--mass-column', default='M', type=str,
     help='column name for gravitational mass in the macro file')
-lgroup.add_argument('--moi-column', default='I', type=str,
-    help='column name for moment of inertia in the macro file')
-lgroup.add_argument('--radius-column', default='I', type=str,
+lgroup.add_argument('--radius-column', default='R', type=str,
     help='column name for radius in the macro file')
 
 lgroup.add_argument('--macro-dir', default=None, type=str,
@@ -94,6 +92,11 @@ vgroup.add_argument('--debug', default=False, action="store_true")
 
 args = parser.parse_args()
 
+if isinstance(args.eos_num_per_dir, str):
+    args.eos_num_per_dir = int(args.eos_num_per_dir)
+if isinstance(args.macro_num_per_dir, str):
+    args.macro_num_per_dir = int(args.macro_num_per_dir)
+
 macro_rhoc, eos_rho = args.macro2eos_central_baryon_density ### assign these to handy names
 
 args.Verbose |= args.debug
@@ -118,16 +121,25 @@ if args.output_eos_dir is None:
 if not args.output_eos_column:
     if args.verbose:
         print('setting --output-eos-column to default values: %s'%(', '.join(features.DEFAULT_EOS_COLUMNS)))
-    args.output_eos_column = features.DEFAULT_EOS_COLUMNS
+    
+    # --- FIX 1 (A) ---
+    args.output_eos_column = list(features.DEFAULT_EOS_COLUMNS)
 
 if eos_rho in args.output_eos_column:
     args.output_eos_column.remove(eos_rho) ### remove this so we don't load it twice
+
+if args.eos_sound_speed_column in args.output_eos_column:
+    if args.verbose:
+        print('removing duplicate column from --output-eos-column: '+args.eos_sound_speed_column)
+    args.output_eos_column.remove(args.eos_sound_speed_column)
 
 # parse the macro columns we want to extract
 if not args.output_macro_column:
     if args.verbose:
         print('setting --output-macro-column to default values: %s'%(', '.join(features.DEFAULT_MACRO_COLUMNS)))
-    args.output_macro_column = features.DEFAULT_MACRO_COLUMNS
+    
+    # --- FIX 1 (B) ---
+    args.output_macro_column = list(features.DEFAULT_MACRO_COLUMNS)
 
 if macro_rhoc not in args.output_macro_column:
     if args.verbose:
@@ -138,6 +150,14 @@ if args.mass_column not in args.output_macro_column:
     if args.verbose:
         print('adding required column for mass to --output-macro-column: '+args.mass_column)
     args.output_macro_column.append(args.mass_column)
+
+### TODO: add radius col
+
+if args.radius_column not in args.output_macro_column:
+    if args.verbose:
+        print('adding required column for radius to --output-macro-column: '+args.radius_column)
+    args.output_macro_column.append(args.radius_column)
+
 
 #-------------------------------------------------
 
@@ -175,14 +195,15 @@ features.process2all_features(
     eos_template, 
     args.eos_num_per_dir, 
     mac_template, 
+    args.macro_num_per_dir,
     summary_template,
     eos_rho, 
     args.eos_sound_speed_column, 
     macro_rhoc,
     args.mass_column,
-    args.radius_column,
-    output_eos_columns = args.output_eos_column,
-    output_macro_cols = args.output_macro_column, 
+    args.radius_column, # based on the M-R relation currently! 
+    output_eos_columns = (args.output_eos_column),   # passing a copy instead 
+    output_macro_cols = (args.output_macro_column),
     flatten_thr=args.flatten_thr, 
     smoothing_width=args.smoothing_width, 
     diff_thr=args.diff_thr, 
@@ -190,4 +211,3 @@ features.process2all_features(
     verbose=args.Verbose, 
     debug=False
 )
-
