@@ -146,8 +146,6 @@ if args.plot: ### make a big ol' plot
     if args.verbose:
         print('plotting the identified phase transitions')
 
-    raise NotImplementedError('combine this plot with debug_figname')
-
     TEMPLATES = [
         (features.MAX_CS2C2_TEMPLATE, 'm'),
         (features.MIN_CS2C2_TEMPLATE, 'r'),
