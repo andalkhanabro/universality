@@ -1,5 +1,6 @@
 #!/bin/bash
 
+### A shell script to create a toy "hierarchical" batch directory structure from "flat" eos and macropath directories
 
 # change these if your eos ID file is different, and your "flat" directories for eos and macro files are different
 
@@ -8,11 +9,11 @@ ORIG_EOS_DIR="eosfiles"
 ORIG_MAC_DIR="macrofiles" 
 
 # where we will save this "new" test directory structure for batch processing 
-TEST_DIR_BASE="outputs/my_test_data"
+TEST_DIR_BASE="outputs/my_test_data_100"
 
 # using default from process2all-features, but should be whatever is set there. we dont have that many files rn. 
 
-NUM_PER_DIR=1000
+NUM_PER_DIR=100 # changed from 200
 
 # refresh from any old runs 
 echo "Cleaning up old test directory!"
