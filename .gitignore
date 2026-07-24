@@ -1,0 +1,11 @@
+
+# generated outputs — rerun the pipeline, don't commit
+outputs/
+*.png
+!figures/*.png
+
+# python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
